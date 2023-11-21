@@ -8,8 +8,11 @@ Para utilizar o programa, basta 'executar' o arquivo **main.py**, geralmente é 
 
 
 ## Gabarito do usuário:
-![](https://github.com/TheVicttor/CorretorProva/Images-Readme/GabaritoUsuario.gif)
-
+<p>
+  <img src="Images-Readme/GabaritoUsuario.gif">
+</p>
 
 ## Excel mostrando os resultados:
-![](https://github.com/TheVicttor/CorretorProva/Images-Readme/Excel.png)
+<p>
+  <img src="Images-Readme/Excel.png">
+</p>
