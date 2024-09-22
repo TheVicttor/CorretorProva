@@ -4,30 +4,36 @@ import numpy as np
 import openpyxl # criar/manipular Excel
 import matplotlib.pyplot as plt
 
+# encontra a posição dos três retângulos principais na imagem
+def contornosPrincipais(imagem):
+    frame = imagem.copy()
+    frame_cinza = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    imagem_limiarizada = cv2.threshold(frame_cinza, 200, 255, cv2.THRESH_BINARY_INV)[1]
+    contornos, hierarquia = cv2.findContours(imagem_limiarizada, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    areas = []
+
+    for contorno in contornos:
+        (x, y, w, h) = cv2.boundingRect(contorno)
+
+        area = int(w) * int(h)
+
+        if area > 10000:
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            areas.append((area, x, y, w, h))
+
+    # plt.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    # plt.title("contorno principal")
+    # plt.show()
+
+    return sorted(areas)
+
 # Verifica se a prova está alinhada, senão é ajustada
 def ajustaProva(imagem):
-    def encontrarContornos(imagemAux):
-        frame = imagemAux.copy()
-        frame_cinza = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        imagem_limiarizada = cv2.threshold(frame_cinza, 200, 255, cv2.THRESH_BINARY_INV)[1]
-        contornos, hierarquia = cv2.findContours(imagem_limiarizada, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        areas = []
-
-        for contorno in contornos:
-            (x, y, w, h) = cv2.boundingRect(contorno)
-
-            area = int(w) * int(h)
-
-            if area > 10000:
-                areas.append((area, x, y, w, h))
-        
-        return areas
-
     # O 'x' do maior contorno da imagem sempre está abaixo de 50 quando a imagem está normal (sem inclinação)
     while True:
-        areas = sorted(encontrarContornos(imagem))
-        if areas[2][1] < areas[0][1] and areas[2][2] > areas[0][2]:
+        areas = contornosPrincipais(imagem)
+        if areas[-1][1] <= areas[0][1] and areas[-1][2] > areas[0][2]:
             break
         else:
             # Rotacionar 90 graus para a direita
@@ -41,31 +47,41 @@ def versaoProva(imagem):
     # Processamento de imagem para melhor identificação do contorno
     imagem_escalaCinza = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     imagem_suavizada = cv2.GaussianBlur(imagem_escalaCinza, (7, 7), 0)
-    imagem_limiarizada_marcado = cv2.threshold(imagem_suavizada, 120, 255, cv2.THRESH_BINARY_INV)[1]
+    imagem_limiarizada_marcado = cv2.threshold(imagem_suavizada, 120, 255, cv2.THRESH_BINARY)[1]
+
     contornosMarcados, hierarquiaMarcados = cv2.findContours(imagem_limiarizada_marcado, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    
+    opcao = []
+
     # Identifica o contorno que corresponde ao tipo da prova
     for contorno in contornosMarcados:
-        (x_axis,y_axis), raio = cv2.minEnclosingCircle(contorno) 
+        (x_axis,y_axis), raio = cv2.minEnclosingCircle(contorno)
 
-        centro = (int(x_axis),int(y_axis)) 
+        centro = (int(x_axis),int(y_axis))
         raio = int(raio)
+        cv2.circle(frame, centro, raio, (0, 255, 0), 2)
 
         area = 3.14 * (raio * raio)
-        if area > 300:
-            opcao = centro
+
+        if area > 200 and area < 850:
+            opcao.append(centro)
             break
-        
+
+    opcao = max([i[0] for i in opcao])
+
     # Identifica qual o tipo da prova baseado na posição onde o contorno está
-    if opcao[0] < 100:
+    if opcao < 200:
         opcao = 'A'
-    elif opcao[0] < 400:
+    elif opcao < 400:
         opcao = 'B'
-    elif opcao[0] < 600:
+    elif opcao < 600:
         opcao = 'C'
-    elif opcao[0] < 900:
+    elif opcao < 900:
         opcao = 'D'
     else: opcao = 'E'
+    
+    # plt.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    # plt.title(opcao)
+    # plt.show()
 
     return opcao
 
@@ -75,7 +91,7 @@ def encontraContornos(imagem):
     imagem_escalaCinza = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
     imagem_suavizada = cv2.GaussianBlur(imagem_escalaCinza, (7, 7), 0)
     imagem_limiarizada_marcados = cv2.threshold(imagem_suavizada, 100, 255, cv2.THRESH_BINARY_INV)[1]
-    imagem_limiarizada_geral = cv2.threshold(imagem_escalaCinza, 200, 255, cv2.THRESH_BINARY_INV)[1]
+    imagem_limiarizada_geral = cv2.threshold(imagem_escalaCinza, 230, 255, cv2.THRESH_BINARY_INV)[1]
 
     # Identifica somente o contorno das opções multipla-escolha marcadas
     contornosMarcados, hierarquiaMarcados = cv2.findContours(imagem_limiarizada_marcados, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -106,8 +122,9 @@ def encontraContornos(imagem):
         raio = int(raio) 
 
         area = 3.14 * (raio * raio)
-        if area > 450 and area < 900:
+        if area > 500 and area < 900:
             listaGeral.append(centro)
+
     '''
     Daqui para baixo são apenas códigos destinados a realizar uma 'limpeza'
     e filtragem nos contornos, de modo a ficar apenas aqueles que correspondem
@@ -221,7 +238,9 @@ def processarFrame(imagem):
     indice = 0
 
     # Somente a parte de interesse é analisada
-    frame = imagem[int(imagem.shape[0]*0.3):imagem.shape[0], :,:].copy()
+    mainContorno = contornosPrincipais(imagem)[-1]
+    frame = imagem[mainContorno[2] - 20:mainContorno[2] + mainContorno[4] + 20]
+    #frame = imagem[int(imagem.shape[0]*0.25):imagem.shape[0], :,:].copy()
 
     # Lista de contende a posição das opções selecionadas e as opções desmarcadas
     listaGeral, listaMarcados = encontraContornos(frame)
@@ -236,12 +255,17 @@ def processarFrame(imagem):
     
         indice += 1
 
-    # Mostra a matriz com as opções escolhidas
-    # for i in range(1, len(escolhas) + 1):
+    contadorBranco = []
 
-    #     print(f"{i}: {escolhas[i - 1]}")
+#   Mostra a matriz com as opções escolhidas
+    for i in range(1, 31):
+        if not any(escolhas[i - 1]):
+            # print(f"{i}:Branco!")
+            contadorBranco.append(i)
+        # print(f"{i}: {escolhas[i - 1]}")
+    
 
-    return escolhas[0:60][:] # nessa prova o aluno só escolhe até 60
+    return [escolhas[0:30][:], contadorBranco] # nessa prova o aluno só escolhe até 30
 
 # Permite o usuário criar o próprio gabarito
 def gabaritoUsuario():
@@ -279,7 +303,10 @@ def gabaritoUsuario():
                 if abs(x - i[0]) <= 2 and abs(y - i[1]) <= 2:
                     stop.append(False)
                     break
-    gabaritoUser = cv2.imread(f'{pathProvas}\\Cartao_resposta.jpg')
+    gabaritoUser = cv2.imread(f'{pathProvas}\\Cartao_resposta_v2.jpg')
+    
+    #mainContorno = contornosPrincipais(gabaritoUser)[-1]
+    # frame = gabaritoUser[mainContorno[2] - 20:mainContorno[2] + mainContorno[4] + 20]
     frame = gabaritoUser[int(gabaritoUser.shape[0]*0.28):gabaritoUser.shape[0],:,:].copy()
 
     listaGeral, listaMarcados = encontraContornos(frame)
@@ -337,6 +364,7 @@ def gabaritoUsuario():
                 frameAux = cv2.resize(frameAux, (gabaritoUser.shape[1], gabaritoUser.shape[0]))
                 versaoProva(frameAux[int(frameAux.shape[0]*0.16):int(frameAux.shape[0]*0.2), :,:])
             except:
+                print('ruim')
                 stop.remove(False)
                 cv2.putText(frame, "Marque o tipo da prova!", ((frame.shape[1]//2 - 80, 60)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 1)
     cv2.destroyAllWindows()
@@ -362,7 +390,7 @@ workbook = openpyxl.Workbook()
 sheet = workbook.active
 
 # Caminho no diretório contendo os arquivos
-pathProvas = '.\\Leitor'
+pathProvas = (os.path.abspath("C:")) + "\\Leitor"
 
 # Limpa a pasta que contém os gabaritos do usuário
 for filename in os.listdir(f'{pathProvas}\\gabarito-usuario'):
@@ -373,11 +401,13 @@ for filename in os.listdir(f'{pathProvas}\\gabarito-usuario'):
 
 # Cria o gabarito do usuário
 while True:
-    desejo = input("Você deseja criar um gabarito? (1) - Sim | (0) - Não: ")
-    if int(desejo) == 1:
+    if int(input("Você deseja criar um gabarito? (1) - Sim | (0) - Não: ")):
         gabaritoUser = gabaritoUsuario()
         try:
-            opcao = versaoProva(gabaritoUser[int(gabaritoUser.shape[0]*0.16):int(gabaritoUser.shape[0]*0.2), :,:])
+            mainContorno = contornosPrincipais(gabaritoUser)[0]
+            frame = gabaritoUser[mainContorno[2] - 20:mainContorno[2] + mainContorno[4] + 20]
+            opcao = versaoProva(frame)
+
             cv2.imwrite(f'{pathProvas}\\gabarito-usuario\\Gabarito{opcao}.jpg', gabaritoUser)
             print("\n--- Gabarito criado com sucesso! ---\n")
         except:
@@ -386,22 +416,32 @@ while True:
 
 # Identifica os arquivos das provas
 for filename in os.listdir(f'{pathProvas}\\provas realizadas'):
+    print(f"Processando arquivo {filename}...")
     cartao_resposta = cv2.imread(f'{pathProvas}\\provas realizadas\\{filename}')
     cartao_resposta = ajustaProva(cartao_resposta)
-    aluno_resposta = processarFrame(cartao_resposta)
-    opcao = versaoProva(cartao_resposta[int(cartao_resposta.shape[0]*0.2):int(cartao_resposta.shape[0]*0.245), :,:])
+    [aluno_resposta, brancos] = processarFrame(cartao_resposta)
+
+    # Descobre o tipo da prova, se não conseguir seta para tipo A
+    try:
+        versionContorno = contornosPrincipais(cartao_resposta)[0]
+        opcao = versaoProva(cartao_resposta[versionContorno[2] - 20:versionContorno[2] + versionContorno[4] + 20])
+    except:
+        opcao = 'A'
+
+    # opcao = 'A'
+
     gabaritoAux = 0
     # Verifica se há um gabarito feito pelo usuário para essa prova, se houver então ele será utilizado
     for gabaritoUser in os.listdir(f'{pathProvas}\\gabarito-usuario'):
         if gabaritoUser == f'Gabarito{opcao}.jpg':
             gabarito_resposta = cv2.imread(f'{pathProvas}\\gabarito-usuario\\{gabaritoUser}')
-            gabarito = processarFrame(gabarito_resposta)
+            gabarito = processarFrame(gabarito_resposta)[0]
             gabaritoAux = 1
     # Caso contrário identifica um gabarito padrão
     if not gabaritoAux:
         for gabarito in os.listdir(f'{pathProvas}\\prova {opcao}'):
             gabarito_resposta = cv2.imread(f'{pathProvas}\\prova {opcao}\\{gabarito}')
-            gabarito = processarFrame(gabarito_resposta)
+            gabarito = processarFrame(gabarito_resposta)[0]
 
     # Matriz booleana das resposta do aluno com a do gabarito
     comparacao = (aluno_resposta == gabarito)
@@ -414,13 +454,22 @@ for filename in os.listdir(f'{pathProvas}\\provas realizadas'):
 
     # Escreve os dados numa linha do Excel
     linhaExcel = [f'Aluno:'] + [f'{filename}']
-    linhaExcel += ['Nota:'] + [corretas] + ['Taxa de Acerto:'] + [f'{int((corretas/60)*100)}%']
-    linhaExcel += ['Questões incorretas:'] + [str(erradas)]
+    linhaExcel += ['Nota:'] + [corretas] + ['Taxa de Acerto:'] + [f'{int((corretas/30)*100)}%']
+    linhaExcel += ['Questões incorretas (incluindo em branco):'] + [str(erradas)]
+    linhaExcel += ['Em brancos: '] + [str(brancos)]
 
     # Acrescenta a linha na planilha
     sheet.append(linhaExcel)
 
-    print(f"Processando arquivo {filename}...")
+# Formata as colunas no excel para comportar o conteúdo
+for coluna in sheet.columns:
+    maxLargura = 0
+    colunaLetra = coluna[0].column_letter  # Pega a letra da coluna
+    for celula in coluna:
+        if len(str(celula.value)) > maxLargura:
+            maxLargura = len(str(celula.value))
+    sheet.column_dimensions[colunaLetra].width = maxLargura + 2
+
 
 print("Arquivos processados")
 # Salva o arquivo Excel
